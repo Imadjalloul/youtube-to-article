@@ -15,7 +15,7 @@ const loadStatus = $('#loading-status');
 /* ─── Settings ────────────────────────────── */
 const DEFAULTS = {
     supadata: 'sd_10ca9edb69286ab5f84e27598474e6b6',
-    openrouter: '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',
+    openrouter: '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',
 };
 function getKey(name) { return localStorage.getItem(`yta-${name}`) || DEFAULTS[name] || ''; }
 function setKey(name, val) { localStorage.setItem(`yta-${name}`, val); }
