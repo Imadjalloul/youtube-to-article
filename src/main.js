@@ -89,7 +89,8 @@ function extractVideoId(url) {
 
 /* ─── Supadata: Fetch Transcript ──────────── */
 async function fetchTranscript(videoId) {
-    const res = await fetch(`https://api.supadata.ai/v1/youtube/transcript?video_id=${videoId}`, {
+    const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const res = await fetch(`https://api.supadata.ai/v1/youtube/transcript?url=${encodeURIComponent(ytUrl)}`, {
         headers: { 'x-api-key': getKey('supadata') }
     });
     if (!res.ok) {
