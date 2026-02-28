@@ -14,12 +14,14 @@ const loadStatus = $('#loading-status');
 
 /* ─── Settings ────────────────────────────── */
 const DEFAULTS = {
+    supadata: 'sd_10ca9edb69286ab5f84e27598474e6b6',
     openrouter: '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',
 };
 function getKey(name) { return localStorage.getItem(`yta-${name}`) || DEFAULTS[name] || ''; }
 function setKey(name, val) { localStorage.setItem(`yta-${name}`, val); }
 
 $('#btn-settings').addEventListener('click', () => {
+    $('#key-supadata').value = getKey('supadata');
     $('#key-openrouter').value = getKey('openrouter');
     show($('#settings-modal'));
 });
@@ -27,6 +29,7 @@ $('#btn-close-settings').addEventListener('click', () => hide($('#settings-modal
 $('#settings-modal').addEventListener('click', e => { if (e.target === $('#settings-modal')) hide($('#settings-modal')); });
 
 $('#btn-save-keys').addEventListener('click', () => {
+    setKey('supadata', $('#key-supadata').value.trim());
     setKey('openrouter', $('#key-openrouter').value.trim());
     hide($('#settings-modal'));
     toast('Keys saved ✓');
@@ -41,6 +44,7 @@ async function startConversion() {
     const videoId = extractVideoId(url);
 
     if (!videoId) return toast('⚠️ Please paste a valid YouTube URL');
+    if (!getKey('supadata')) return toast('⚠️ Set your Supadata API key first (⚙️)');
     if (!getKey('openrouter')) return toast('⚠️ Set your OpenRouter API key first (⚙️)');
 
     hide(secInput);
@@ -83,15 +87,17 @@ function extractVideoId(url) {
     return null;
 }
 
-/* ─── Fetch Transcript (Python API) ───────── */
+/* ─── Supadata: Fetch Transcript ──────────── */
 async function fetchTranscript(videoId) {
-    const res = await fetch(`/api/transcript?v=${videoId}`);
+    const res = await fetch(`https://api.supadata.ai/v1/youtube/transcript?video_id=${videoId}`, {
+        headers: { 'x-api-key': getKey('supadata') }
+    });
     if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || `Transcript fetch failed (${res.status})`);
+        const err = await res.text();
+        throw new Error(`Transcript fetch failed: ${res.status} — ${err}`);
     }
     const data = await res.json();
-    return data.segments || [];
+    return data.content || data.transcript || data;
 }
 
 /* ─── Fetch Video Title (oEmbed) ──────────── */
