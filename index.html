@@ -64,14 +64,26 @@
         <h2>API Settings</h2>
         <button class="icon-btn" id="btn-close-settings">✕</button>
       </div>
-      <p class="modal-desc">Keys are saved in your browser only. Never sent anywhere except the respective APIs.</p>
+      <p class="modal-desc">Keys stay in your browser only. Never sent anywhere except the respective APIs.</p>
       <div class="field">
-        <label>Supadata API Key</label>
+        <label>Transcript Source</label>
         <input type="password" id="key-supadata" placeholder="sd_..." />
-        <small><a href="https://dash.supadata.ai" target="_blank">Get a free key →</a></small>
+        <small><a href="https://dash.supadata.ai" target="_blank">Supadata — get a free key →</a></small>
       </div>
       <div class="field">
-        <label>OpenRouter API Key</label>
+        <label>AI Provider</label>
+        <select id="provider-select">
+          <option value="gemini">Google AI Studio (Gemini 2.5 Flash)</option>
+          <option value="openrouter">OpenRouter (Gemma 3 27B free)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Google AI Studio Key</label>
+        <input type="password" id="key-gemini" placeholder="AIza..." />
+        <small><a href="https://aistudio.google.com/apikey" target="_blank">Get a free key →</a></small>
+      </div>
+      <div class="field">
+        <label>OpenRouter Key</label>
         <input type="password" id="key-openrouter" placeholder="sk-or-..." />
         <small><a href="https://openrouter.ai/keys" target="_blank">Get a free key →</a></small>
       </div>

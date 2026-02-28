@@ -15,14 +15,18 @@ const loadStatus = $('#loading-status');
 /* ─── Settings ────────────────────────────── */
 const DEFAULTS = {
     supadata: 'sd_10ca9edb69286ab5f84e27598474e6b6',
-    openrouter: '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',
+    gemini: 'AIzaSyDnbC1dFfOuguPcFXD96j5JlaZLxS0bcOE',
+    openrouter: '',
+    provider: 'gemini',
 };
 function getKey(name) { return localStorage.getItem(`yta-${name}`) || DEFAULTS[name] || ''; }
 function setKey(name, val) { localStorage.setItem(`yta-${name}`, val); }
 
 $('#btn-settings').addEventListener('click', () => {
     $('#key-supadata').value = getKey('supadata');
+    $('#key-gemini').value = getKey('gemini');
     $('#key-openrouter').value = getKey('openrouter');
+    $('#provider-select').value = getKey('provider');
     show($('#settings-modal'));
 });
 $('#btn-close-settings').addEventListener('click', () => hide($('#settings-modal')));
@@ -30,9 +34,11 @@ $('#settings-modal').addEventListener('click', e => { if (e.target === $('#setti
 
 $('#btn-save-keys').addEventListener('click', () => {
     setKey('supadata', $('#key-supadata').value.trim());
+    setKey('gemini', $('#key-gemini').value.trim());
     setKey('openrouter', $('#key-openrouter').value.trim());
+    setKey('provider', $('#provider-select').value);
     hide($('#settings-modal'));
-    toast('Keys saved ✓');
+    toast('Settings saved ✓');
 });
 
 /* ─── Convert Flow ────────────────────────── */
@@ -42,10 +48,12 @@ $('#url-input').addEventListener('keydown', e => { if (e.key === 'Enter') startC
 async function startConversion() {
     const url = $('#url-input').value.trim();
     const videoId = extractVideoId(url);
+    const provider = getKey('provider');
 
     if (!videoId) return toast('⚠️ Please paste a valid YouTube URL');
     if (!getKey('supadata')) return toast('⚠️ Set your Supadata API key first (⚙️)');
-    if (!getKey('openrouter')) return toast('⚠️ Set your OpenRouter API key first (⚙️)');
+    if (provider === 'gemini' && !getKey('gemini')) return toast('⚠️ Set your Google AI Studio key first (⚙️)');
+    if (provider === 'openrouter' && !getKey('openrouter')) return toast('⚠️ Set your OpenRouter key first (⚙️)');
 
     hide(secInput);
     show(secLoading);
@@ -56,13 +64,17 @@ async function startConversion() {
         const transcript = await fetchTranscript(videoId);
         if (!transcript || transcript.length === 0) throw new Error('No transcript found for this video.');
 
-        // Step 2: Structure with AI
-        loadStatus.textContent = 'Structuring article with AI…';
+        // Step 2: Extract structure (Pass 1)
+        loadStatus.textContent = 'Analyzing content…';
         const rawText = transcript.map(s => s.text).join(' ');
         const title = await fetchVideoTitle(videoId);
-        const article = await structureWithAI(rawText, title);
+        const outline = await extractOutline(rawText, title);
 
-        // Step 3: Render
+        // Step 3: Write full article (Pass 2)
+        loadStatus.textContent = 'Writing article…';
+        const article = await writeArticle(outline, title);
+
+        // Step 4: Render
         renderArticle(title, videoId, article);
         hide(secLoading);
         show(secArticle);
@@ -112,30 +124,110 @@ async function fetchVideoTitle(videoId) {
     }
 }
 
-/* ─── OpenRouter: AI Structuring ──────────── */
-async function structureWithAI(transcript, title) {
-    // Truncate transcript if too long (Gemma 3 context is large but let's be safe)
-    const maxChars = 25000;
+/* ─── AI: Two-Pass Processing ─────────────── */
+
+// Pass 1: Extract outline & structure
+async function extractOutline(transcript, title) {
+    const maxChars = 60000;
     const text = transcript.length > maxChars ? transcript.slice(0, maxChars) + '\n[transcript truncated]' : transcript;
 
-    const prompt = `You are a skilled editor. Convert this YouTube video transcript into a clean, well-structured article.
+    const prompt = `You are an expert content analyst. Analyze this YouTube video transcript and extract a detailed outline.
 
-Title: "${title}"
+Video Title: "${title}"
 
-Rules:
-- Write in clear, concise prose (NOT a transcript)
-- Add meaningful H2 section headings (use ##)
-- Add H3 subheadings where appropriate (use ###)
-- Extract key points as bullet lists where helpful
-- Bold important terms and concepts
-- Remove filler words, repetition, and verbal tics
-- At the end, add a "## Glossary" section with 5-10 key terms defined
-- Use clean Markdown formatting
-- Do NOT add any introductory meta-commentary like "Here is the article" — just output the article directly
+Return a structured outline in this EXACT format:
+
+## Main Topic
+[One sentence describing the core subject]
+
+## Key Sections
+1. [Section title] — [2-3 sentence summary of what's covered]
+2. [Section title] — [2-3 sentence summary]
+3. [Continue for all major sections...]
+
+## Key Quotes
+- "[Exact notable quote from transcript]"
+- "[Another key quote]"
+- [List 3-5 most impactful quotes]
+
+## Key Concepts & Terms
+- **[Term]**: [Brief definition or context]
+- [List 5-10 important concepts mentioned]
+
+## Main Takeaways
+1. [Key takeaway 1]
+2. [Key takeaway 2]
+3. [List 3-7 takeaways]
+
+IMPORTANT: Be thorough. Capture ALL major topics discussed. Do not add commentary — just extract and organize.
 
 Transcript:
 ${text}`;
 
+    return await callAI(prompt);
+}
+
+// Pass 2: Write the full article
+async function writeArticle(outline, title) {
+    const prompt = `You are a professional journalist and editor. Using the outline below, write a polished, publication-ready article.
+
+Article Title: "${title}"
+
+WRITING GUIDELINES:
+- Write in clear, engaging, professional prose
+- Use a compelling opening paragraph that hooks the reader
+- Organize with H2 (##) section headings and H3 (###) subheadings where appropriate
+- Write smooth transitions between sections — the article should flow naturally
+- Integrate key quotes using blockquotes (> format)
+- Use bullet points and numbered lists where they improve clarity
+- Bold important terms and concepts on first mention
+- Add context and background where the speaker assumed prior knowledge
+- End with a strong concluding section that ties everything together
+- After the conclusion, add a "## Key Takeaways" section with the most important points as a bullet list
+- Finally, add a "## Glossary" section defining 5-10 key terms from the content
+
+FORMATTING:
+- Use clean Markdown
+- Do NOT include any meta-commentary like "Here is the article" — output ONLY the article
+- Do NOT repeat the title as an H1 — start directly with the opening paragraph
+
+OUTLINE TO EXPAND:
+${outline}`;
+
+    return await callAI(prompt);
+}
+
+/* ─── AI Provider Abstraction ─────────────── */
+async function callAI(prompt) {
+    const provider = getKey('provider');
+    if (provider === 'gemini') return callGemini(prompt);
+    return callOpenRouter(prompt);
+}
+
+// Google AI Studio (Gemini 2.5 Flash)
+async function callGemini(prompt) {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${getKey('gemini')}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.4, maxOutputTokens: 8192 }
+        })
+    });
+
+    if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Gemini API failed: ${res.status} — ${err}`);
+    }
+
+    const data = await res.json();
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!content) throw new Error('Gemini returned empty response.');
+    return content;
+}
+
+// OpenRouter (any model)
+async function callOpenRouter(prompt) {
     const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -147,19 +239,19 @@ ${text}`;
         body: JSON.stringify({
             model: 'google/gemma-3-27b-it:free',
             messages: [{ role: 'user', content: prompt }],
-            max_tokens: 4096,
-            temperature: 0.3,
+            max_tokens: 8192,
+            temperature: 0.4,
         })
     });
 
     if (!res.ok) {
         const err = await res.text();
-        throw new Error(`AI structuring failed: ${res.status} — ${err}`);
+        throw new Error(`OpenRouter failed: ${res.status} — ${err}`);
     }
 
     const data = await res.json();
     const content = data.choices?.[0]?.message?.content;
-    if (!content) throw new Error('AI returned empty response.');
+    if (!content) throw new Error('OpenRouter returned empty response.');
     return content;
 }
 
